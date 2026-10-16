@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="DotLearn 20 - interactive 3D concept model of a refreshable braille tutor for visually impaired students.">
+<title>DotLearn Braille Tutor</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a workbench. The 3D stage fills the left, a spec rail runs down the right; stage stacks over the rail on phones. */
+:root{
+  --bg:#e7eae7; --panel:#f5f6f3; --ink:#18232e; --muted:#56626c; --line:#d2d8d4;
+  --accent:#c4700a; --accent-soft:#f5e3c6; --on-accent:#1a1206;
+  --stage-a:#f6f7f4; --stage-b:#d3d9d6; --chip:#e9ece8;
+  --f-ui:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --f-braille:"Segoe UI Symbol","Apple Braille","DejaVu Sans","Noto Sans Symbols 2",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#10151a; --panel:#151c22; --ink:#e6e9e5; --muted:#98a3ab; --line:#27313b;
+    --accent:#f2a93b; --accent-soft:#3a2c15; --on-accent:#1a1206;
+    --stage-a:#1f2830; --stage-b:#0b0f13; --chip:#1e2730; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#10151a; --panel:#151c22; --ink:#e6e9e5; --muted:#98a3ab; --line:#27313b;
+  --accent:#f2a93b; --accent-soft:#3a2c15; --on-accent:#1a1206;
+  --stage-a:#1f2830; --stage-b:#0b0f13; --chip:#1e2730; color-scheme:dark;
+}
+html,body{height:100%}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:minmax(0,1fr) 388px;height:100%}
+.stage{position:relative;min-height:0;overflow:hidden;background:radial-gradient(120% 90% at 50% 28%,var(--stage-a),var(--stage-b))}
+.stage canvas{display:block;width:100%;height:100%;outline:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+
+.stage-head{position:absolute;top:16px;left:max(16px,env(safe-area-inset-left,0px));pointer-events:none;display:flex;flex-direction:column;gap:4px}
+.tag{display:inline-flex;align-self:flex-start;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:3px 8px;border-radius:4px;background:var(--chip);color:var(--muted);border:1px solid var(--line)}
+.hint{font-size:13px;color:var(--muted)}
+
+.tools{position:absolute;top:14px;right:16px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:60%}
+.tool{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer}
+.tool[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.tool:hover{border-color:var(--accent)}
+
+.hs{position:absolute;left:0;top:0;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);font-family:var(--f-mono);font-size:12px;font-weight:500;cursor:pointer;box-shadow:0 0 0 3px var(--panel),0 2px 8px rgba(0,0,0,.25);transition:opacity .2s,transform .15s;will-change:transform}
+.hs:hover{filter:brightness(1.08)}
+.hs.is-hidden{opacity:0;pointer-events:none}
+.hs[aria-pressed="true"]{box-shadow:0 0 0 3px var(--panel),0 0 0 6px var(--accent)}
+.labels-off .hs{display:none}
+
+.caption{position:absolute;bottom:16px;left:max(16px,env(safe-area-inset-left,0px));right:16px;max-width:470px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;gap:12px;align-items:flex-start;box-shadow:0 6px 24px rgba(0,0,0,.12)}
+.caption .num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;font-family:var(--f-mono);font-size:12px}
+.caption h3{margin:0;font-size:15px}
+.caption p{margin:2px 0 0;font-size:13.5px;color:var(--muted)}
+.caption .x{margin-left:auto;flex:none;border:0;background:none;cursor:pointer;color:var(--muted);font-size:18px;line-height:1;padding:2px 4px}
+
+.nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:var(--muted)}
+
+.rail{min-height:0;overflow-y:auto;border-left:1px solid var(--line);background:var(--panel);padding-block:24px 32px;padding-left:22px;padding-right:max(22px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:26px}
+.eyebrow{font-family:var(--f-mono);font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font-size:30px;line-height:1.1;margin:6px 0 8px;letter-spacing:-.01em;text-wrap:balance}
+h1 small{font-family:var(--f-mono);font-size:15px;color:var(--muted);font-weight:400;margin-left:6px}
+.lede{margin:0;color:var(--muted);max-width:60ch}
+h2{font-size:13px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px;color:var(--muted);font-weight:700}
+
+.seg{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--chip)}
+.seg button{border:0;background:none;padding:9px 6px;cursor:pointer;font-weight:700;font-size:14px}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--on-accent)}
+
+.sound{display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.sound .btn{font-weight:700}
+.sound .btn[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.sound p{margin:0;font-size:13px;color:var(--muted)}
+.wave{display:inline-flex;gap:2px;align-items:center;height:14px;vertical-align:middle;margin-left:6px}
+.wave i{width:3px;height:4px;border-radius:2px;background:var(--accent);opacity:.35}
+.speaking .wave i{opacity:1;animation:wv .7s ease-in-out infinite}
+.speaking .wave i:nth-child(2){animation-delay:.12s}.speaking .wave i:nth-child(3){animation-delay:.24s}.speaking .wave i:nth-child(4){animation-delay:.36s}
+@keyframes wv{50%{height:14px}}
+@media (prefers-reduced-motion: reduce){.speaking .wave i{animation:none;height:10px}}
+.mode-body{margin-top:12px;display:flex;flex-direction:column;gap:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:7px 12px;cursor:pointer;font-size:14px}
+.btn:hover{border-color:var(--accent)}
+.pageinfo{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.field{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:6px;padding:9px 11px;background:var(--bg);font:inherit;color:var(--ink)}
+.note{font-size:13px;color:var(--muted);margin:0}
+
+.readout{border:1px solid var(--line);border-radius:10px;background:var(--bg);padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.readout .lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.braille{font-family:var(--f-braille);font-size:24px;line-height:1.3;letter-spacing:.06em;overflow-x:auto;white-space:nowrap}
+.print{font-size:15px;min-height:1.5em}
+.dots{font-family:var(--f-mono);font-size:13px;color:var(--accent)}
+
+.feats{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.feat{border-top:1px solid var(--line)}
+.feat:last-child{border-bottom:1px solid var(--line)}
+.feat button{all:unset;box-sizing:border-box;width:100%;display:grid;grid-template-columns:26px minmax(0,1fr);gap:10px;padding:10px 2px;cursor:pointer}
+.feat button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.feat .n{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--accent);color:var(--accent);display:grid;place-items:center;font-family:var(--f-mono);font-size:11.5px;margin-top:1px}
+.feat b{font-size:14.5px}
+.feat p{margin:2px 0 0;font-size:13.5px;color:var(--muted);display:none}
+.feat button[aria-pressed="true"] .n{background:var(--accent);color:var(--on-accent)}
+.feat button[aria-pressed="true"] p{display:block}
+
+dl.specs{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:7px 16px;margin:0;font-size:14px}
+dl.specs dt{color:var(--muted)}
+dl.specs dd{margin:0;font-variant-numeric:tabular-nums}
+
+@media (max-width: 860px){
+  html,body{height:auto}
+  .app{grid-template-columns:1fr;height:auto}
+  .stage{height:62vh;min-height:380px}
+  .rail{border-left:0;border-top:1px solid var(--line);overflow:visible;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .tools{max-width:52%}
+  .caption{bottom:12px;right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion: reduce){ .hs{transition:none} }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <section class="stage" id="stage" aria-label="3D model of the DotLearn 20 braille tutor">
+    <div class="stage-head">
+      <span class="tag">Concept model · v0.1</span>
+      <span class="hint">Drag to rotate · scroll or pinch to zoom · tap keys to hear them</span>
+    </div>
+    <div class="tools">
+      <button class="tool" id="t-sound" aria-pressed="false">Sound</button>
+      <button class="tool" id="t-rotate" aria-pressed="true">Auto-rotate</button>
+      <button class="tool" id="t-home">Front view</button>
+      <button class="tool" id="t-top">Top view</button>
+      <button class="tool" id="t-labels" aria-pressed="true">Labels</button>
+    </div>
+    <div id="hotspots"></div>
+    <div class="caption" id="caption" hidden>
+      <span class="num" id="cap-n">1</span>
+      <div><h3 id="cap-t"></h3><p id="cap-d"></p></div>
+      <button class="x" id="cap-x" aria-label="Close">×</button>
+    </div>
+    <div class="nogl" id="nogl" hidden>Your browser couldn’t start 3D graphics (WebGL). The feature list and braille demo on the right still work.</div>
+  </section>
+
+  <aside class="rail">
+    <header>
+      <p class="eyebrow">Assistive technology concept</p>
+      <h1>DotLearn <small>20</small></h1>
+      <p class="lede">A refreshable braille tutor for visually impaired students. It teaches letters one at a time, turns class materials into braille and speech, and lets students write with a six-key keyboard, so they can learn and study on their own.</p>
+    </header>
+
+    <section>
+      <h2>Try the display</h2>
+      <div class="sound" id="sound-box">
+        <button class="btn" id="snd" aria-pressed="false">Turn sound on</button>
+        <p>Pin clicks, key taps and a spoken voice. <span class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i></span></p>
+      </div>
+      <div class="seg" role="group" aria-label="Device mode">
+        <button id="m-learn" aria-pressed="true">Learn</button>
+        <button id="m-read" aria-pressed="false">Read</button>
+        <button id="m-type" aria-pressed="false">Type</button>
+      </div>
+
+      <div class="mode-body" id="b-learn">
+        <div class="row">
+          <button class="btn" id="l-prev">◀ Prev</button>
+          <button class="btn" id="l-play">Pause</button>
+          <button class="btn" id="l-next">Next ▶</button>
+          <span class="pageinfo" id="l-info"></span>
+        </div>
+        <p class="note">The letter appears in the first cell, with a practice word after it. The matching keys on the keyboard light up, so students learn to read and write the letter together.</p>
+      </div>
+
+      <div class="mode-body" id="b-read" hidden>
+        <div class="row">
+          <button class="btn" id="r-prev">◀ Back</button>
+          <button class="btn" id="r-play">Pause</button>
+          <button class="btn" id="r-next">Forward ▶</button>
+          <span class="pageinfo" id="r-info"></span>
+        </div>
+        <p class="note">A short reading passage flows across the 20 cells one line at a time, the way a student pans through a textbook.</p>
+      </div>
+
+      <div class="mode-body" id="b-type" hidden>
+        <label class="note" for="type-in">Type anything to see it in uncontracted (Grade 1) braille:</label>
+        <input class="field" id="type-in" type="text" maxlength="160" value="Hello, I can read braille!" autocomplete="off">
+        <div class="row">
+          <button class="btn" id="t-prev">◀ Back</button>
+          <button class="btn" id="t-next">Forward ▶</button>
+          <span class="pageinfo" id="t-info"></span>
+        </div>
+      </div>
+
+      <div class="readout" style="margin-top:12px">
+        <span class="lbl">On the pins now</span>
+        <div class="braille" id="ro-braille" aria-hidden="true"></div>
+        <div class="print" id="ro-print"></div>
+        <div class="dots" id="ro-dots"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Parts</h2>
+      <ol class="feats" id="feats"></ol>
+    </section>
+
+    <section>
+      <h2>Design targets</h2>
+      <dl class="specs">
+        <dt>Size</dt><dd>220 × 140 × 22 mm</dd>
+        <dt>Braille</dt><dd>20 refreshable cells, 6 dots each</dd>
+        <dt>Writing</dt><dd>6-key Perkins layout + space bar</dd>
+        <dt>Audio</dt><dd>Stereo speakers, 3.5 mm jack</dd>
+        <dt>Camera</dt><dd>Rear camera, print-to-braille OCR</dd>
+        <dt>Connect</dt><dd>USB-C, Bluetooth, microSD</dd>
+        <dt>Battery</dt><dd>One full school day and more</dd>
+        <dt>Body</dt><dd>Rubber bumper, high-contrast keys</dd>
+      </dl>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------------- Braille (uncontracted, Grade 1) ---------------- */
+const bits = s => [...s].reduce((m,d)=>m|(1<<(+d-1)),0);
+const LET = {};
+'a1 b12 c14 d145 e15 f124 g1245 h125 i24 j245 k13 l123 m134 n1345 o135 p1234 q12345 r1235 s234 t2345 u136 v1236 w2456 x1346 y13456 z1356'
+  .split(' ').forEach(t=>{ LET[t[0]] = bits(t.slice(1)); });
+const PUN = {',':'2',';':'23',':':'25','.':'256','!':'235','?':'236',"'":'3','-':'36','(':'2356',')':'2356','"':'236'};
+for (const k in PUN) PUN[k] = bits(PUN[k]);
+const NUMSIGN = bits('3456'), CAPSIGN = bits('6'), LETSIGN = bits('56');
+const DIGITS = 'jabcdefghi';
+
+function encodeWord(w){
+  const out = []; let num = false;
+  for (const ch of w){
+    if (ch >= '0' && ch <= '9'){ if(!num){ out.push(NUMSIGN); num = true; } out.push(LET[DIGITS[+ch]]); continue; }
+    const lo = ch.toLowerCase();
+    if (LET[lo] !== undefined){
+      if (num && lo <= 'j') out.push(LETSIGN);
+      num = false;
+      if (ch !== lo) out.push(CAPSIGN);
+      out.push(LET[lo]); continue;
+    }
+    if (PUN[ch] !== undefined){ num = false; out.push(PUN[ch]); }
+  }
+  return out;
+}
+function paginate(text, n=20){
+  const pages = []; let cells = [], words = [];
+  const flush = () => { if (cells.length){ pages.push({cells, print: words.join(' ')}); cells = []; words = []; } };
+  for (const w of text.trim().split(/\s+/)){
+    if (!w) continue;
+    let c = encodeWord(w); if (!c.length) continue;
+    while (c.length > n){ flush(); pages.push({cells: c.slice(0,n), print: w}); c = c.slice(n); }
+    const need = cells.length ? cells.length + 1 + c.length : c.length;
+    if (need > n) flush();
+    if (cells.length) cells.push(0);
+    cells.push(...c); words.push(w);
+  }
+  flush();
+  return pages.length ? pages : [{cells: [], print: ''}];
+}
+const uni = cells => { let s = ''; for (let i=0;i<20;i++) s += String.fromCharCode(0x2800 + (cells[i]||0)); return s; };
+const dotList = b => [1,2,3,4,5,6].filter(d => b & (1<<(d-1)));
+
+const WORDS = {a:'apple',b:'ball',c:'cat',d:'dog',e:'egg',f:'fish',g:'goat',h:'hat',i:'ink',j:'jam',k:'kite',l:'lamp',m:'moon',n:'nest',o:'owl',p:'pen',q:'queen',r:'rain',s:'sun',t:'tree',u:'up',v:'van',w:'web',x:'xylophone',y:'yak',z:'zip'};
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+const PASSAGE = 'Braille is read with the fingertips. Each cell has six dots in two columns of three. Louis Braille created this code in 1824, when he was 15 years old. Practise a little every day and your reading will get faster.';
+
+/* ---------------- App state ---------------- */
+const state = {
+  mode: 'learn', letter: 0, playing: !reduce,
+  readPages: paginate(PASSAGE), readPage: 0,
+  typePages: [], typePage: 0,
+  cells: [], print: '', litDots: 0
+};
+
+/* ---------------- 3D ---------------- */
+const stage = document.getElementById('stage');
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  if (!renderer.getContext()) throw new Error('no gl');
+} catch(e){ renderer = null; document.getElementById('nogl').hidden = false; }
+
+const C = h => new THREE.Color(h).convertSRGBToLinear();
+const std = (h, r=0.55, m=0) => new THREE.MeshStandardMaterial({color:C(h), roughness:r, metalness:m});
+const AMBER = C('#ffb03a');
+
+const W=22, D=14, H=2.2, R=2.2, TOP=H+0.04;
+const glowables = [];
+const decals = [];
+const speakerMeshes = [], clickables = [];
+const clickable = (mesh, fn) => { mesh.userData.click = fn; clickables.push(mesh); return mesh; };
+let pinMesh=null, pinCur=null, pinTgt=null, pinBase=[], Ys=0;
+const keyGroups = {};   // dot -> {group, mesh, press}
+let panMeshes = [];
+let scrDraw = ()=>{};
+let selected = null, selT = 0;
+
+function rrShape(w,d,r){
+  r = Math.min(r, w/2-0.0005, d/2-0.0005);
+  const s = new THREE.Shape(), x=-w/2, y=-d/2;
+  s.moveTo(x+r,y); s.lineTo(x+w-r,y); s.absarc(x+w-r,y+r,r,-Math.PI/2,0,false);
+  s.lineTo(x+w,y+d-r); s.absarc(x+w-r,y+d-r,r,0,Math.PI/2,false);
+  s.lineTo(x+r,y+d); s.absarc(x+r,y+d-r,r,Math.PI/2,Math.PI,false);
+  s.lineTo(x,y+r); s.absarc(x+r,y+r,r,Math.PI,Math.PI*1.5,false);
+  return s;
+}
+function slab(w,d,h,r,bevel,material){
+  bevel = Math.min(bevel, h/2-0.001); if (bevel < 0.005) bevel = 0;
+  const shape = rrShape(w-2*bevel, d-2*bevel, Math.max(0.02, r-bevel));
+  const g = new THREE.ExtrudeGeometry(shape, {depth:Math.max(0.002,h-2*bevel), bevelEnabled:bevel>0, bevelThickness:bevel, bevelSize:bevel, bevelSegments:5, curveSegments:28});
+  g.rotateX(-Math.PI/2); g.translate(0,bevel,0);
+  const m = new THREE.Mesh(g, material); m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+function tag(mesh, feature){ mesh.userData.feature = feature; mesh.userData.glow = 0; glowables.push(mesh); return mesh; }
+function decal(w,h,draw,px=256){
+  const cv = document.createElement('canvas'); cv.width = Math.round(px*w/h); cv.height = px;
+  const ctx = cv.getContext('2d');
+  const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 8;
+  const mat = new THREE.MeshBasicMaterial({map:tex, transparent:true, depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2});
+  const g = new THREE.PlaneGeometry(w,h); g.rotateX(-Math.PI/2);
+  const m = new THREE.Mesh(g, mat);
+  const redraw = () => { ctx.clearRect(0,0,cv.width,cv.height); draw(ctx,cv.width,cv.height); tex.needsUpdate = true; };
+  redraw(); decals.push(redraw);
+  return m;
+}
+
+let scene, camera, controls;
+if (renderer){
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  stage.insertBefore(renderer.domElement, stage.firstChild);
+  renderer.domElement.setAttribute('tabindex','0');
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(32, 1, 0.1, 300);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minDistance = 7; controls.maxDistance = 70;
+  controls.maxPolarAngle = Math.PI*0.495;
+  controls.autoRotate = state.playing; controls.autoRotateSpeed = 0.7;
+  controls.enablePan = true;
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4652, 0.7));
+  const key = new THREE.DirectionalLight(0xffffff, 0.95);
+  key.position.set(9,20,12); key.castShadow = true;
+  key.shadow.mapSize.set(2048,2048);
+  Object.assign(key.shadow.camera, {left:-16,right:16,top:16,bottom:-16,near:1,far:60});
+  key.shadow.bias = -0.0004; key.shadow.radius = 4;
+  scene.add(key);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.35); fill.position.set(-12,8,-10); scene.add(fill);
+  const rim = new THREE.DirectionalLight(0xffe6c4, 0.3); rim.position.set(0,6,-18); scene.add(rim);
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120,120), new THREE.ShadowMaterial({opacity:0.22}));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+  const dev = new THREE.Group(); scene.add(dev);
+
+  /* Body */
+  const bumper = tag(slab(W, D, 1.0, R, 0.3, std('#e8921b', 0.85)), 'bumper'); dev.add(bumper);
+  const shell = slab(W-0.5, D-0.5, H, R-0.25, 0.45, std('#23313f', 0.5, 0.05)); dev.add(shell);
+  const deck = slab(W-2.2, D-2.2, 0.04, R-1.1, 0, std('#2c3b4a', 0.62)); deck.position.y = H; deck.castShadow=false; dev.add(deck);
+
+  /* Braille display */
+  const lip = tag(slab(13.9, 2.55, 0.03, 0.5, 0, std('#3c4b5a', 0.5)), 'display'); lip.position.set(0,TOP,4.55); dev.add(lip);
+  const well = tag(slab(13.5, 2.15, 0.02, 0.32, 0, std('#0f1317', 0.35)), 'display'); well.position.set(0,TOP+0.03,4.55); dev.add(well);
+  clickable(well, ()=> speakNow());
+  Ys = TOP + 0.05;
+  const pinGeo = new THREE.SphereGeometry(0.078, 14, 10); pinGeo.scale(1, 0.85, 1);
+  pinMesh = new THREE.InstancedMesh(pinGeo, std('#f3efe6', 0.32, 0.15), 120);
+  pinMesh.castShadow = true;
+  pinCur = new Float32Array(120); pinTgt = new Float32Array(120);
+  const pitch = 0.62, zc = 4.85;
+  for (let c=0;c<20;c++){
+    const cx = -9.5*pitch + c*pitch;
+    for (let d=0; d<6; d++){
+      const col = d<3 ? 0 : 1, row = d%3;
+      pinBase[c*6+d] = [cx + (col ? 0.125 : -0.125), zc - 0.25 + row*0.25];
+    }
+  }
+  dev.add(pinMesh);
+  const routMat = std('#5d6b78', 0.5);
+  for (let c=0;c<20;c++){
+    const k = tag(slab(0.44, 0.2, 0.05, 0.09, 0.02, routMat), 'display');
+    k.position.set(-9.5*pitch + c*pitch, Ys, 4.0); dev.add(k);
+  }
+  for (const s of [-1,1]){
+    const p = tag(slab(0.56, 1.6, 0.22, 0.27, 0.08, std('#e8921b', 0.6)), 'pan');
+    p.position.set(s*7.35, TOP, 4.55); dev.add(p); panMeshes.push(p);
+    clickable(p, ()=> panStep(s));
+  }
+
+  /* Perkins-style keyboard: dots 3-2-1 left hand, 4-5-6 right hand */
+  const keyPos = {3:[-6.5,0.45,0.12], 2:[-4.85,0.0,0.08], 1:[-3.2,0.2,0.04], 4:[3.2,0.2,-0.04], 5:[4.85,0.0,-0.08], 6:[6.5,0.45,-0.12]};
+  for (const d of [1,2,3,4,5,6]){
+    const [x,z,ry] = keyPos[d];
+    const g = new THREE.Group(); g.position.set(x, TOP, z); g.rotation.y = ry;
+    const m = tag(slab(1.35, 1.75, 0.36, 0.64, 0.12, std('#ece6d8', 0.42)), 'keyboard');
+    g.add(m);
+    const lbl = decal(0.6, 0.6, (ctx,w,h)=>{
+      ctx.fillStyle = '#5a6774'; ctx.font = `700 ${h*0.62}px "Atkinson Hyperlegible", system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(d), w/2, h/2+h*0.03);
+    }, 128);
+    lbl.position.y = 0.364; g.add(lbl);
+    dev.add(g); keyGroups[d] = {group:g, mesh:m, press:0};
+    clickable(m, ()=>{ keyGroups[d].press = 1; sfx.thock(); say(`dot ${d}`); });
+  }
+  const space = tag(slab(3.6, 0.95, 0.3, 0.45, 0.1, std('#ece6d8', 0.42)), 'keyboard');
+  space.position.set(0, TOP, 2.65); dev.add(space);
+  clickable(space, ()=>{ sfx.thock(0.8); say('space'); });
+
+  /* Five-way navigator */
+  const ring = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.86,0.9,0.12,56), std('#3c4b5a',0.45)), 'nav');
+  ring.position.set(0, TOP+0.06, 0.65); ring.castShadow = true; dev.add(ring);
+  const cap = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.34,0.3,40), std('#ece6d8',0.42)), 'nav');
+  cap.position.set(0, TOP+0.15, 0.65); cap.castShadow = true; dev.add(cap);
+  for (let i=0;i<4;i++){
+    const a = i*Math.PI/2;
+    const nub = tag(new THREE.Mesh(new THREE.SphereGeometry(0.075,12,8), std('#ece6d8',0.42)), 'nav');
+    nub.position.set(Math.sin(a)*0.62, TOP+0.13, 0.65+Math.cos(a)*0.62); dev.add(nub);
+  }
+
+  /* Mode keys with different tactile shapes */
+  const modeX = [-2.4, 0, 2.4];
+  modeX.forEach((x,i)=>{
+    const k = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.46,0.49,0.22,44), std('#e8921b',0.55)), 'modes');
+    k.position.set(x, TOP+0.11, -2.25); k.castShadow = true; dev.add(k);
+    clickable(k, ()=>{ sfx.thock(0.7); if (i===0) setMode('learn'); else if (i===1) setMode('read'); else say('Quiz mode. Coming in the next version.'); });
+    const inkMat = std('#1d2833', 0.5);
+    let sym;
+    if (i===0){ sym = new THREE.Mesh(new THREE.SphereGeometry(0.13,16,10), inkMat); sym.scale.y = 0.55; }
+    else if (i===1){ sym = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.08,0.12), inkMat); }
+    else { sym = new THREE.Mesh(new THREE.CylinderGeometry(0.22,0.22,0.07,3), inkMat); sym.rotation.y = Math.PI; }
+    sym.position.set(x, TOP+0.24, -2.25); dev.add(sym);
+  });
+  const modeLbl = decal(7.2, 0.42, (ctx,w,h)=>{
+    ctx.fillStyle = '#c9cfd4'; ctx.font = `700 ${h*0.5}px "Atkinson Hyperlegible", system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ['LEARN','READ','QUIZ'].forEach((t,i)=> ctx.fillText(t, (modeX[i]+3.6)/7.2*w, h/2));
+  });
+  modeLbl.position.set(0, TOP+0.003, -1.42); dev.add(modeLbl);
+
+  /* Speakers */
+  const holeGeo = new THREE.CylinderGeometry(0.045,0.045,0.02,8);
+  const holeMat = std('#0a0d10', 0.9);
+  const holes = [];
+  for (let j=-6;j<=6;j++) for (let i=-6;i<=6;i++){
+    const x = i*0.19 + (j&1 ? 0.095 : 0), z = j*0.165;
+    if (x*x+z*z < 0.97) holes.push([x,z]);
+  }
+  for (const sx of [-7.8, 7.8]){
+    const disc = tag(new THREE.Mesh(new THREE.CylinderGeometry(1.15,1.15,0.04,56), std('#35434f',0.6)), 'speakers');
+    disc.position.set(sx, TOP+0.02, -4.6); disc.receiveShadow = true; dev.add(disc);
+    speakerMeshes.push(disc); clickable(disc, ()=> speakNow());
+    const im = new THREE.InstancedMesh(holeGeo, holeMat, holes.length);
+    const o = new THREE.Object3D();
+    holes.forEach((h,i)=>{ o.position.set(sx+h[0], TOP+0.045, -4.6+h[1]); o.updateMatrix(); im.setMatrixAt(i,o.matrix); });
+    dev.add(im);
+  }
+
+  /* Teacher mirror screen */
+  const bezel = tag(slab(7.6, 3.0, 0.08, 0.35, 0.03, std('#0b0e12', 0.3)), 'screen');
+  bezel.position.set(0, TOP, -4.55); dev.add(bezel);
+  const scr = document.createElement('canvas'); scr.width = 1120; scr.height = 400;
+  const sctx = scr.getContext('2d');
+  const stex = new THREE.CanvasTexture(scr); stex.encoding = THREE.sRGBEncoding; stex.anisotropy = 8;
+  const sg = new THREE.PlaneGeometry(7.0, 2.5); sg.rotateX(-Math.PI/2);
+  const sm = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({map:stex}));
+  sm.position.set(0, TOP+0.082, -4.55); dev.add(sm);
+  scrDraw = () => { drawScreen(sctx, scr.width, scr.height); stex.needsUpdate = true; };
+
+  /* Printed brand */
+  const brand = decal(3.4, 0.62, (ctx,w,h)=>{
+    ctx.textBaseline = 'middle';
+    ctx.font = `700 ${h*0.62}px "Atkinson Hyperlegible", system-ui, sans-serif`;
+    ctx.fillStyle = '#e9e3d4'; ctx.fillText('DotLearn', 4, h/2);
+    const tw = ctx.measureText('DotLearn').width;
+    ctx.fillStyle = '#f2a93b'; ctx.font = `500 ${h*0.42}px "IBM Plex Mono", monospace`;
+    ctx.fillText('20', tw + 18, h/2 + h*0.04);
+  });
+  brand.position.set(-7.4, TOP+0.003, 2.65); dev.add(brand);
+  const tagline = decal(3.4, 0.3, (ctx,w,h)=>{
+    ctx.textBaseline='middle'; ctx.fillStyle='#8996a2';
+    ctx.font = `400 ${h*0.55}px "IBM Plex Mono", monospace`; ctx.fillText('braille literacy tutor', 6, h/2);
+  });
+  tagline.position.set(-7.4, TOP+0.003, 3.15); dev.add(tagline);
+
+  /* Side ports (left), power (right) */
+  const portMat = std('#07090b', 0.6);
+  const sideX = -(W-0.5)/2;
+  const usb = tag(slab(0.14, 0.95, 0.32, 0.06, 0, portMat), 'ports'); usb.position.set(sideX-0.01, 1.29, 0); dev.add(usb);
+  const jack = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.12,24), portMat), 'ports'); jack.rotation.z = Math.PI/2; jack.position.set(sideX-0.01, 1.45, 1.6); dev.add(jack);
+  const jring = new THREE.Mesh(new THREE.TorusGeometry(0.2,0.03,8,28), std('#8a96a2',0.3,0.6)); jring.rotation.y = Math.PI/2; jring.position.set(sideX-0.06,1.45,1.6); dev.add(jring);
+  const sd = tag(new THREE.Mesh(new THREE.BoxGeometry(0.12,0.1,1.1), portMat), 'ports'); sd.position.set(sideX-0.01, 1.45, -1.8); dev.add(sd);
+  const power = new THREE.Mesh(new THREE.BoxGeometry(0.14,0.3,0.8), std('#e8921b',0.55)); power.position.set(-sideX+0.02, 1.45, -3.5); dev.add(power);
+
+  /* Rear print-to-braille camera */
+  const backZ = -(D-0.5)/2;
+  const housing = tag(new THREE.Mesh(new THREE.CylinderGeometry(0.52,0.52,0.14,44), std('#0b0e12',0.3)), 'camera');
+  housing.rotation.x = Math.PI/2; housing.position.set(0, 1.45, backZ-0.03); dev.add(housing);
+  const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.3,0.3,0.16,40), std('#1d3346',0.08,0.7));
+  lens.rotation.x = Math.PI/2; lens.position.set(0, 1.45, backZ-0.06); dev.add(lens);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.1,14,10), new THREE.MeshStandardMaterial({color:C('#fff6e0'), emissive:C('#fff1cc'), emissiveIntensity:0.6}));
+  led.position.set(0.95, 1.45, backZ-0.02); dev.add(led);
+}
+
+/* ---------------- Teacher screen drawing ---------------- */
+function cellDots(ctx, x, y, s, r, b, on, off, nums){
+  for (let d=0; d<6; d++){
+    const cx = x + (d<3?0:1)*s, cy = y + (d%3)*s, lit = b & (1<<d);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
+    if (lit){ ctx.fillStyle = on; ctx.fill(); }
+    else { ctx.strokeStyle = off; ctx.lineWidth = Math.max(1.5, r*0.16); ctx.stroke(); }
+    if (nums){
+      ctx.fillStyle = lit ? '#1a1206' : off; ctx.font = `700 ${r*0.95}px "IBM Plex Mono", monospace`;
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(d+1), cx, cy+1);
+    }
+  }
+}
+function wrapLines(ctx, text, maxW){
+  const words = text.split(' '), lines = []; let line = '';
+  for (const w of words){ const t = line ? line+' '+w : w; if (ctx.measureText(t).width > maxW && line){ lines.push(line); line = w; } else line = t; }
+  if (line) lines.push(line); return lines;
+}
+function drawScreen(ctx, w, h){
+  ctx.fillStyle = '#0a1016'; ctx.fillRect(0,0,w,h);
+  const amber = '#f2a93b', cream = '#efe9dc', dim = '#4a5966';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.font = '500 26px "IBM Plex Mono", monospace'; ctx.fillStyle = '#8a98a5';
+  let head = '', right = '';
+  if (state.mode === 'learn'){ head = 'LEARN'; right = `${state.letter+1} / 26`; }
+  if (state.mode === 'read'){ head = 'READ · BRAILLE BASICS'; right = `${state.readPage+1} / ${state.readPages.length}`; }
+  if (state.mode === 'type'){ head = 'TYPE · YOUR TEXT'; right = `${state.typePage+1} / ${state.typePages.length}`; }
+  ctx.fillText(head, 36, 50);
+  ctx.textAlign = 'right'; ctx.fillText(right, w-110, 50);
+  ctx.strokeStyle = '#8a98a5'; ctx.lineWidth = 2; ctx.strokeRect(w-92, 30, 50, 24); ctx.fillStyle = '#7fd18b'; ctx.fillRect(w-88, 34, 34, 16); ctx.fillStyle='#8a98a5'; ctx.fillRect(w-41, 37, 4, 10);
+  ctx.fillStyle = '#1b2631'; ctx.fillRect(36, 70, w-72, 2);
+
+  if (state.mode === 'learn'){
+    const L = ALPHA[state.letter], b = LET[L];
+    ctx.textAlign = 'left'; ctx.fillStyle = cream;
+    ctx.font = '700 210px "Atkinson Hyperlegible", system-ui, sans-serif';
+    ctx.fillText(L.toUpperCase() + L, 40, 320);
+    cellDots(ctx, 560, 135, 92, 32, b, amber, dim, true);
+    ctx.fillStyle = '#8a98a5'; ctx.font = '500 26px "IBM Plex Mono", monospace';
+    ctx.fillText('DOTS', 790, 140);
+    ctx.fillStyle = amber; ctx.font = '700 54px "Atkinson Hyperlegible", system-ui, sans-serif';
+    ctx.fillText(dotList(b).join(' '), 790, 200);
+    ctx.fillStyle = '#8a98a5'; ctx.font = '500 26px "IBM Plex Mono", monospace';
+    ctx.fillText('WORD', 790, 262);
+    ctx.fillStyle = cream; ctx.font = '700 54px "Atkinson Hyperlegible", system-ui, sans-serif';
+    ctx.fillText(WORDS[L], 790, 322);
+  } else {
+    ctx.textAlign = 'left'; ctx.fillStyle = cream;
+    ctx.font = '700 54px "Atkinson Hyperlegible", system-ui, sans-serif';
+    const lines = wrapLines(ctx, state.print || '—', w-80).slice(0,2);
+    lines.forEach((l,i)=> ctx.fillText(l, 40, 140 + i*64));
+    const pitch = 52, x0 = (w - 20*pitch)/2 + 12;
+    for (let c=0;c<20;c++) cellDots(ctx, x0 + c*pitch, 300, 16, 5.5, state.cells[c]||0, amber, '#2a3642', false);
+  }
+}
+
+/* ---------------- Sound: pin clicks, key taps, speech ---------------- */
+const $ = id => document.getElementById(id);
+const snd = {on:false, ctx:null, noise:null, out:null, speaking:false, speechEnd:0};
+const sfx = {
+  init(){
+    if (snd.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ctx = snd.ctx = new AC();
+    const len = Math.floor(ctx.sampleRate*0.06), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 4);
+    snd.noise = buf;
+    snd.out = ctx.createGain(); snd.out.gain.value = 0.7; snd.out.connect(ctx.destination);
+  },
+  // one braille cell refreshing: a short, bright piezo "tick"
+  tick(t, strength=1, freq=3200){
+    if (!snd.on || !snd.ctx) return;
+    const c = snd.ctx, src = c.createBufferSource(); src.buffer = snd.noise;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq * (0.85 + Math.random()*0.3); bp.Q.value = 7;
+    const g = c.createGain(); const peak = 0.35 + 0.5*strength;
+    g.gain.setValueAtTime(peak, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+    src.connect(bp); bp.connect(g); g.connect(snd.out); src.start(t); src.stop(t + 0.06);
+  },
+  // a key being pressed: soft low "thock"
+  thock(level=1){
+    if (!snd.on || !snd.ctx) return;
+    const c = snd.ctx, t = c.currentTime;
+    const o = c.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(210, t); o.frequency.exponentialRampToValueAtTime(80, t + 0.09);
+    const g = c.createGain(); g.gain.setValueAtTime(0.5*level, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    o.connect(g); g.connect(snd.out); o.start(t); o.stop(t + 0.14);
+    const src = c.createBufferSource(); src.buffer = snd.noise;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100;
+    const g2 = c.createGain(); g2.gain.setValueAtTime(0.4*level, t); g2.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    src.connect(lp); lp.connect(g2); g2.connect(snd.out); src.start(t); src.stop(t + 0.06);
+  },
+  // all changed cells refresh as a quick left-to-right ripple
+  refresh(prev, next){
+    if (!snd.on || !snd.ctx) return;
+    const t0 = snd.ctx.currentTime + 0.01; let k = 0;
+    for (let c=0;c<20;c++){
+      const diff = (prev[c]||0) ^ (next[c]||0); if (!diff) continue;
+      let n = 0; for (let b=diff; b; b &= b-1) n++;
+      this.tick(t0 + k*0.014, Math.min(1, n/4)); k++;
+    }
+  }
+};
+
+let voice = null;
+const hasSpeech = 'speechSynthesis' in window;
+function pickVoice(){
+  if (!hasSpeech) return;
+  const vs = speechSynthesis.getVoices();
+  voice = vs.find(v => /^en[-_](GB|US|AU)/i.test(v.lang) && /natural|google|samantha|serena|libby|sonia|aria|jenny/i.test(v.name))
+       || vs.find(v => /^en[-_]/i.test(v.lang)) || vs[0] || null;
+}
+if (hasSpeech){ pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function setSpeaking(on){ snd.speaking = on; if (!on) snd.speechEnd = performance.now(); $('sound-box').classList.toggle('speaking', on); }
+let sayTimer = 0;
+function say(text){
+  if (!snd.on || !hasSpeech || !text) return;
+  speechSynthesis.cancel(); clearTimeout(sayTimer);
+  sayTimer = setTimeout(()=>{
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.lang = voice ? voice.lang : 'en-GB'; u.rate = 0.9; u.pitch = 1.05;
+    u.onstart = ()=> setSpeaking(true);
+    u.onend = u.onerror = ()=> setSpeaking(false);
+    setSpeaking(true);
+    speechSynthesis.speak(u);
+  }, 40);
+}
+function spokenFor(){
+  if (state.mode === 'learn'){
+    const L = ALPHA[state.letter], ds = dotList(LET[L]);
+    return `Letter ${L.toUpperCase()}. ${ds.length === 1 ? 'Dot' : 'Dots'} ${ds.join(', ')}. ${L.toUpperCase()} is for ${WORDS[L]}.`;
+  }
+  return state.print;
+}
+function speakNow(){ sfx.thock(0.5); say(spokenFor()); }
+function setSound(on){
+  snd.on = on;
+  if (on){ sfx.init(); if (snd.ctx && snd.ctx.state !== 'running') snd.ctx.resume(); }
+  else if (hasSpeech){ speechSynthesis.cancel(); setSpeaking(false); }
+  $('snd').setAttribute('aria-pressed', String(on)); $('snd').textContent = on ? 'Sound on' : 'Turn sound on';
+  $('t-sound').setAttribute('aria-pressed', String(on));
+  if (on){ sfx.refresh(new Array(20).fill(0), state.cells); say(spokenFor()); }
+}
+$('snd').addEventListener('click', ()=> setSound(!snd.on));
+$('t-sound').addEventListener('click', ()=> setSound(!snd.on));
+
+/* ---------------- Apply content to the device ---------------- */
+let lastAdvance = performance.now();
+function render(speak=true){
+  const prevCells = state.cells.slice();
+  let cells = [], print = '', lit = 0;
+  if (state.mode === 'learn'){
+    const L = ALPHA[state.letter];
+    const word = encodeWord(WORDS[L]);
+    cells = [LET[L], 0, ...word].slice(0,20);
+    print = `${L.toUpperCase()} — ${WORDS[L]}`;
+    lit = LET[L];
+    $('l-info').textContent = `Letter ${state.letter+1} of 26`;
+    $('ro-dots').textContent = `Letter ${L}: dots ${dotList(lit).join(' · ')}`;
+  } else if (state.mode === 'read'){
+    const p = state.readPages[state.readPage];
+    cells = p.cells; print = p.print;
+    $('r-info').textContent = `Line ${state.readPage+1} of ${state.readPages.length}`;
+    $('ro-dots').textContent = '';
+  } else {
+    const p = state.typePages[state.typePage] || {cells:[],print:''};
+    cells = p.cells; print = p.print;
+    $('t-info').textContent = `Line ${state.typePage+1} of ${state.typePages.length}`;
+    $('ro-dots').textContent = state.typePages.length > 1 ? 'Longer text pans across lines, like a real display.' : '';
+  }
+  state.cells = cells; state.print = print; state.litDots = lit;
+  $('ro-braille').textContent = uni(cells);
+  $('ro-print').textContent = print;
+  if (pinTgt){ for (let c=0;c<20;c++) for (let d=0;d<6;d++) pinTgt[c*6+d] = ((cells[c]||0) & (1<<d)) ? 1 : 0; }
+  for (const d in keyGroups){
+    const on = (lit & (1<<(d-1))) !== 0;
+    keyGroups[d].lit = on;
+    if (on) keyGroups[d].press = 1;
+  }
+  scrDraw();
+  sfx.refresh(prevCells, cells);
+  if (speak) say(spokenFor());
+  lastAdvance = performance.now();
+}
+function pulsePan(){ panMeshes.forEach(m => m.userData.flash = 1); if (snd.on && snd.ctx) sfx.tick(snd.ctx.currentTime, 0.7, 1500); }
+function panStep(dir){
+  if (state.mode === 'learn'){ state.letter = (state.letter + (dir>0?1:25)) % 26; pulsePan(); render(); }
+  else if (state.mode === 'read'){ const n = state.readPages.length; state.readPage = (state.readPage + (dir>0?1:n-1)) % n; pulsePan(); render(); }
+  else { const n = state.typePages.length; const p = Math.max(0, Math.min(n-1, state.typePage + dir)); if (p !== state.typePage){ state.typePage = p; pulsePan(); render(); } }
+}
+
+/* Modes and controls */
+function setMode(m){
+  state.mode = m;
+  ['learn','read','type'].forEach(k=>{ $('m-'+k).setAttribute('aria-pressed', String(k===m)); $('b-'+k).hidden = k!==m; });
+  render();
+}
+['learn','read','type'].forEach(k => $('m-'+k).addEventListener('click', ()=>setMode(k)));
+$('l-prev').onclick = ()=>{ state.letter = (state.letter+25)%26; render(); };
+$('l-next').onclick = ()=>{ state.letter = (state.letter+1)%26; render(); };
+$('r-prev').onclick = ()=>{ state.readPage = (state.readPage-1+state.readPages.length)%state.readPages.length; pulsePan(); render(); };
+$('r-next').onclick = ()=>{ state.readPage = (state.readPage+1)%state.readPages.length; pulsePan(); render(); };
+$('t-prev').onclick = ()=>{ if(state.typePage>0){ state.typePage--; pulsePan(); render(); } };
+$('t-next').onclick = ()=>{ if(state.typePage<state.typePages.length-1){ state.typePage++; pulsePan(); render(); } };
+function setPlaying(p){ state.playing = p; $('l-play').textContent = p ? 'Pause' : 'Play'; $('r-play').textContent = p ? 'Pause' : 'Play'; }
+$('l-play').onclick = ()=> setPlaying(!state.playing);
+$('r-play').onclick = ()=> setPlaying(!state.playing);
+setPlaying(state.playing);
+let typeSpeak = 0;
+function retype(){
+  state.typePages = paginate($('type-in').value); state.typePage = 0;
+  if (state.mode !== 'type') return;
+  render(false);
+  clearTimeout(typeSpeak); typeSpeak = setTimeout(()=> say(spokenFor()), 900);
+}
+$('type-in').addEventListener('input', retype);
+retype();
+// Auto-advance; with sound on, wait for the voice to finish before moving on
+setInterval(()=>{
+  if (!state.playing || document.hidden) return;
+  const now = performance.now();
+  if (snd.on && hasSpeech && (snd.speaking || speechSynthesis.speaking || now - snd.speechEnd < 900)) return;
+  if (now - lastAdvance < 2800) return;
+  if (state.mode === 'learn'){ state.letter = (state.letter+1)%26; render(); }
+  else if (state.mode === 'read'){ state.readPage = (state.readPage+1)%state.readPages.length; pulsePan(); render(); }
+}, 250);
+
+/* ---------------- Parts, hotspots, camera ---------------- */
+const FEATS = [
+  {id:'display', t:'Refreshable braille display', d:'20 cells of six pins each. Pins rise and drop to form letters, so one device can show any lesson, book or worksheet.', p:[0,0.15,4.0], n:[0,1,0], cam:[0,8.5,15], tgt:[0,0,4.6]},
+  {id:'keyboard', t:'Six-key braille keyboard', d:'Laid out like a Perkins brailler: dots 1-2-3 under the left hand, 4-5-6 under the right. Students write by pressing keys together as a chord.', p:[-4.85,0.4,0.0], n:[0,1,0], cam:[0,12,11], tgt:[0,0,0.8]},
+  {id:'screen', t:'Teacher mirror screen', d:'Shows the print text next to the braille, so a sighted teacher or parent can follow and help without knowing braille.', p:[3.3,0.12,-3.4], n:[0,1,0], cam:[0,10,5], tgt:[0,0,-4.5]},
+  {id:'modes', t:'Learn · Read · Quiz keys', d:'Each key carries a different raised shape (dot, bar, triangle), so students find the mode by touch alone.', p:[2.4,0.3,-2.25], n:[0,1,0], cam:[0,8,4.5], tgt:[0,0,-2.2]},
+  {id:'nav', t:'Five-way navigator', d:'Moves between lines, menus and lessons. Pressing the centre confirms.', p:[0,0.35,0.65], n:[0,1,0], cam:[3,7,7], tgt:[0,0,0.6]},
+  {id:'pan', t:'Panning keys', d:'Move the display one line forward or back. One sits at each end, right under the thumbs while reading.', p:[7.35,0.28,4.55], n:[0,1,0], cam:[12,7,11], tgt:[7.3,0,4.5]},
+  {id:'speakers', t:'Stereo speakers', d:'Speak letters, words and corrections aloud, so students get instant feedback while they read and write.', p:[7.8,0.06,-4.6], n:[0,1,0], cam:[13,9,2], tgt:[7.8,0,-4.6]},
+  {id:'camera', t:'Print-to-braille camera', d:'Photographs a printed worksheet or textbook page. Text recognition turns it into braille and speech, making classroom materials accessible.', p:[0,1.45,-6.95], n:[0,0,-1], abs:true, cam:[5,5,-17], tgt:[0,1.4,-6.8], absCam:true},
+  {id:'ports', t:'USB-C, headphone jack, microSD', d:'USB-C for charging and connecting to a computer, a headphone jack for quiet classrooms, and a card slot for e-books and lesson packs.', p:[-10.85,1.45,0], n:[-1,0,0], abs:true, cam:[-20,5,5], tgt:[-10.8,1.45,0], absCam:true},
+  {id:'bumper', t:'High-visibility grip bumper', d:'A bright rubber edge helps low-vision students locate the device on a desk and protects it from drops in a school bag.', p:[10.95,0.55,3], n:[1,0,0], abs:true, cam:[18,6,14], tgt:[9,0.6,3], absCam:true},
+];
+FEATS.forEach(f=>{
+  f.pv = renderer ? new THREE.Vector3(f.p[0], f.abs ? f.p[1] : TOP + f.p[1], f.p[2]) : null;
+  f.nv = renderer ? new THREE.Vector3(...f.n) : null;
+});
+
+const list = $('feats'), hsWrap = $('hotspots');
+FEATS.forEach((f,i)=>{
+  const li = document.createElement('li'); li.className = 'feat';
+  li.innerHTML = `<button aria-pressed="false"><span class="n">${i+1}</span><span><b>${f.t}</b><p>${f.d}</p></span></button>`;
+  li.firstChild.addEventListener('click', ()=> select(selected===f.id ? null : f.id, true));
+  list.appendChild(li); f.li = li.firstChild;
+  if (renderer){
+    const b = document.createElement('button'); b.className = 'hs'; b.textContent = i+1;
+    b.setAttribute('aria-label', f.t); b.setAttribute('aria-pressed','false');
+    b.addEventListener('click', ()=> select(f.id, true));
+    hsWrap.appendChild(b); f.hs = b;
+  }
+});
+function select(id, fly){
+  selected = id; selT = 0;
+  FEATS.forEach((f,i)=>{
+    const on = f.id === id;
+    f.li.setAttribute('aria-pressed', String(on));
+    if (f.hs) f.hs.setAttribute('aria-pressed', String(on));
+    if (on){
+      $('cap-n').textContent = i+1; $('cap-t').textContent = f.t; $('cap-d').textContent = f.d;
+      if (fly && renderer) flyTo(f.cam, f.tgt, !f.absCam);
+    }
+  });
+  $('caption').hidden = !id;
+}
+$('cap-x').onclick = ()=> select(null);
+
+if (renderer){
+  let tween = null;
+  const fitScale = () => { const a = camera.aspect; return a < 1.35 ? Math.min(2.2, 1.35/a) : 1; };
+  function flyTo(pos, tgt, relY){
+    const t = new THREE.Vector3(tgt[0], relY ? TOP + tgt[1] : tgt[1], tgt[2]);
+    const p = new THREE.Vector3(pos[0], relY ? TOP + pos[1] : pos[1], pos[2]);
+    p.sub(t).multiplyScalar(fitScale()).add(t);
+    tween = {t0: performance.now(), dur: reduce ? 1 : 950, fp: camera.position.clone(), ft: controls.target.clone(), tp: p, tt: t};
+    setAuto(false);
+  }
+  window.flyTo = flyTo;
+  const home = () => flyTo([0,13,21], [0,-0.9,0.6], true);
+  const top = () => flyTo([0,30,1.5], [0,0,0.3], true);
+
+  function setAuto(on){ controls.autoRotate = on; $('t-rotate').setAttribute('aria-pressed', String(on)); }
+  $('t-rotate').onclick = ()=> setAuto(!controls.autoRotate);
+  $('t-home').onclick = ()=>{ select(null); home(); };
+  $('t-top').onclick = ()=>{ select(null); top(); };
+  $('t-labels').onclick = ()=>{
+    const on = $('t-labels').getAttribute('aria-pressed') !== 'true';
+    $('t-labels').setAttribute('aria-pressed', String(on));
+    stage.classList.toggle('labels-off', !on);
+  };
+  controls.addEventListener('start', ()=>{ tween = null; setAuto(false); });
+
+  // Tap a key, pan key, mode key, speaker or the display on the model itself
+  const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+  let down = null;
+  const cv = renderer.domElement;
+  const hitAt = e => {
+    const r = cv.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left)/r.width)*2-1, -((e.clientY - r.top)/r.height)*2+1);
+    ray.setFromCamera(ndc, camera);
+    const hit = ray.intersectObjects(clickables, false)[0];
+    return hit ? hit.object : null;
+  };
+  cv.addEventListener('pointerdown', e => { down = {x:e.clientX, y:e.clientY}; });
+  cv.addEventListener('pointerup', e => {
+    if (!down) return;
+    const moved = Math.hypot(e.clientX-down.x, e.clientY-down.y); down = null;
+    if (moved > 6) return;
+    const obj = hitAt(e);
+    if (obj){ if (!snd.on) setSound(true); obj.userData.click(); }
+  });
+  cv.addEventListener('pointermove', e => {
+    if (e.buttons) return;
+    cv.style.cursor = hitAt(e) ? 'pointer' : '';
+  });
+
+  function resize(){
+    const r = stage.getBoundingClientRect();
+    renderer.setSize(r.width, r.height, false);
+    camera.aspect = r.width / Math.max(1, r.height); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage); resize();
+  // initial pose
+  {
+    const t = new THREE.Vector3(0, TOP-0.9, 0.6);
+    const p = new THREE.Vector3(9, TOP+12, 19).sub(t).multiplyScalar(fitScale()).add(t);
+    camera.position.copy(p); controls.target.copy(t); controls.update();
+  }
+  if (reduce) setAuto(false);
+
+  const o = new THREE.Object3D(), v = new THREE.Vector3(), toCam = new THREE.Vector3();
+  const ease = k => k<0.5 ? 4*k*k*k : 1 - Math.pow(-2*k+2, 3)/2;
+  let last = performance.now();
+  function frame(now){
+    requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now-last)/1000); last = now;
+    if (tween){
+      const k = Math.min(1, (now - tween.t0)/tween.dur), e = ease(k);
+      camera.position.lerpVectors(tween.fp, tween.tp, e);
+      controls.target.lerpVectors(tween.ft, tween.tt, e);
+      if (k >= 1) tween = null;
+    }
+    controls.update();
+
+    // pins
+    const kk = reduce ? 1 : 1 - Math.pow(0.0008, dt);
+    for (let i=0;i<120;i++){
+      pinCur[i] += (pinTgt[i] - pinCur[i]) * kk;
+      const [x,z] = pinBase[i];
+      o.position.set(x, Ys - 0.045 + pinCur[i]*0.075, z); o.updateMatrix();
+      pinMesh.setMatrixAt(i, o.matrix);
+    }
+    pinMesh.instanceMatrix.needsUpdate = true;
+
+    // keys: press + glow
+    for (const d in keyGroups){
+      const kg = keyGroups[d];
+      kg.press = Math.max(0, kg.press - dt*1.6);
+      const dip = reduce ? 0 : Math.sin(Math.min(1,kg.press)*Math.PI) * 0.1;
+      kg.group.position.y = TOP - dip;
+      const target = kg.lit ? 0.5 : 0;
+      kg.mesh.userData.glow += (target - kg.mesh.userData.glow) * Math.min(1, dt*8);
+    }
+    panMeshes.forEach(m=>{ m.userData.flash = Math.max(0,(m.userData.flash||0) - dt*1.8); m.userData.glow = m.userData.flash*0.7; });
+    const talk = snd.speaking ? 0.22 + 0.18*Math.abs(Math.sin(now/90)) : 0;
+    speakerMeshes.forEach(m=>{ m.userData.glow = talk; });
+
+    // selection pulse
+    selT += dt;
+    const pulse = 0.28 + 0.22*Math.sin(selT*4);
+    for (const m of glowables){
+      const g = Math.max(m.userData.glow||0, m.userData.feature === selected ? pulse : 0);
+      m.material.emissive.copy(AMBER).multiplyScalar(g);
+    }
+
+    renderer.render(scene, camera);
+
+    // hotspots
+    const r = renderer.domElement;
+    const w = r.clientWidth, h = r.clientHeight;
+    for (const f of FEATS){
+      v.copy(f.pv).project(camera);
+      toCam.copy(camera.position).sub(f.pv);
+      const facing = toCam.dot(f.nv) > 0.15 * toCam.length();
+      const x = (v.x+1)/2*w, y = (1-v.y)/2*h;
+      f.hs.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      f.hs.classList.toggle('is-hidden', !facing || v.z > 1);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+render();
+if (document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>{ decals.forEach(fn=>fn()); scrDraw(); });
+}
+})();
+</script>
+
+</body>
+</html>
